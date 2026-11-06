@@ -1,6 +1,6 @@
 ---
 title: OpenCode pj/tk workspace plugin
-status: native-acceptance-pending
+status: isolated-native-acceptance-passed
 updated: 2026-11-07
 ---
 
@@ -8,7 +8,7 @@ updated: 2026-11-07
 
 Server and TUI plugin for OpenCode 2.2.5. Project relationships and durable tasks come exclusively from the `pj` CLI. Discovery conventions are `projects/` and `.archived/` within the current Git checkout. The plugin keeps no relationship database, project configuration file, or migration state.
 
-**Current checkpoint:** project archive is a managed folder move from `projects/<relative>` to `.archived/<relative>`. The sidebar shows active projects and a searchable Inbox above native blocks, preserving native Todo. Agents use `pj` directly through native shell. The previous frozen revision passed native project archive, fork and navigation checks; its cold Inbox was incomplete. This revision loads the full official native inventory and awaits fresh cold native acceptance.
+**Current checkpoint:** implementation commit `fe48b473` passed isolated native acceptance. Project archive is a managed folder move from `projects/<relative>` to `.archived/<relative>`. The sidebar shows active projects and a searchable Inbox above native blocks, preserving native Todo. Agents use `pj` directly through native shell. Cold Inbox, pagination, navigation, restart, project archive and native forks are verified. Production installation and data migration remain a separate step.
 
 ## Local development
 
@@ -96,7 +96,7 @@ The HOST bridge executes argument arrays with `shell: false`. Operation kinds, f
 2. **Agent admission:** agents call the existing native shell directly for project operations. HOST RPC and fork lifecycle actions use host authority. OpenCode V2 uses the permission action `shell`.
 3. **Inbox scope:** only native sessions in the current vault and native project ID are considered. Complete active-and-archived memberships and the full native inventory are required before claiming a session is unlinked. Read errors are shown explicitly.
 4. **Live refresh:** RPC `changed`/`forkResult`, native `session.created`, `session.forked`, `session.deleted`, `session.archived`, `session.unarchived`, `session.renamed`, `session.moved`, `server.connected`, route changes and manual Refresh rebuild the project snapshot and inventory. Subscriptions are removed on sidebar cleanup. Native filesystem changes reach the sidebar through the server's RPC change notification; external CLI event delivery remains a native acceptance case. Each refresh uses the existing abort/latest-generation guards; loading is a single pass with explicit error reporting.
-5. **Runtime evidence:** the earlier frozen revision passed project-folder archive, active-only composition, fork and native navigation checks, with cold Inbox completeness blocking acceptance. This inventory revision requires a fresh isolated cold run. Loader unit tests and real CLI integration cover their respective data/transport contracts; the coordinator owns native UI acceptance.
+5. **Runtime evidence:** implementation commit `fe48b473` passed the fresh isolated run: 209 native sessions across pages 200/9/0, cold C visible before opening it, cold restart with only A restored, native navigation/drafts, project-folder archive, and linked/unlinked native forks. The coordinator read the captures and independently checked source hashes, original native data equality and owned-process cleanup. Model-driven Todo/question execution and production cutover were outside this run.
 
 ## Source map
 
@@ -118,4 +118,6 @@ Cold-cache RED→GREEN: cache contains only A; official pages contain A/B, then 
 
 `npm run typecheck` passed. `PJ_INTEGRATION_BIN=/Users/themishkun/projects/pj/bin/pj npm test` passed: 76 tests, 308 assertions, 9.83 seconds. The 18 inventory tests cover exact project/signal inputs, terminal pages (empty/absent/null next), deduplication, cold current metadata fallback, invalid current identity/project, repeated/cyclic cursors, later-page failure/malformed data, pre-cancellation, cancellation during get/list, a late older response after a newer successful load, and all required event subscriptions/cleanup. A dedicated `session.forked`-only test discovers a newly unlinked fork through official inventory while the cache remains cold. Existing projection tests retain complete archived memberships and vault/project/subagent boundaries; the real pj branch-move suite remains green.
 
-This worker launched no native instance and changed only plugin source, tests and README. Fresh cold native UI acceptance, rendered title/navigation behavior and live event delivery remain with the coordinator.
+The coordinator repeated typecheck and the full real-pj suite: 76 tests, 308 assertions, 8.47 seconds. A focused independent review found no P1/P2 blockers. The isolated native harness then passed on unchanged source hashes; the coordinator verified the evidence before recording acceptance.
+
+[Native report and portable evidence](../md/opencode-knowledge-base/10_Projects/herdr-spaces-sidebar/verification/2026-11-07-cold-inbox/README.md): 205 filler sessions put C beyond the first page; archive preserved original session metadata/history, task claims/status and documents; each linked fork and project move produced one scoped commit. All owned test processes exited. The installed working profile and real project data remain unchanged.
