@@ -10,15 +10,18 @@ import { isAbsolute } from "node:path"
 import { loadNativeSessions, onNativeInventoryChanged } from "./native-inventory"
 import type { SessionInfo } from "@opencode/client"
 
-function Row(props: { ctx: Context; label: string; indent?: number; run: () => void; current?: boolean }) {
+function Row(props: { ctx: Context; label: string; indent?: number; run: () => void; current?: boolean; bold?: boolean; suffix?: string; width?: number; flexGrow?: number }) {
   const [hover, setHover] = createSignal(false)
   let armed = false
-  return <box height={1} minWidth={0} maxWidth="100%" paddingLeft={props.indent ?? 0}
+  return <box height={1} minWidth={0} maxWidth="100%" width={props.width} flexGrow={props.flexGrow} paddingLeft={props.indent ?? 0}
     onMouseOver={() => setHover(true)} onMouseOut={() => { setHover(false); armed = false }}
     onMouseDown={e => { armed = e.button === 0 && !e.isDragging; if (armed) { e.preventDefault(); e.stopPropagation() } }}
     onMouseDrag={() => { armed = false }}
     onMouseUp={e => { const trigger = armed && e.button === 0 && !e.isDragging; armed = false; if (trigger) { e.preventDefault(); e.stopPropagation(); props.run() } }}>
-    <text fg={hover() ? props.ctx.theme.text.base : props.ctx.theme.text.muted} wrapMode="none" selectable={false}>{props.label}</text>
+    <text fg={hover() ? props.ctx.theme.text.base : props.ctx.theme.text.muted} wrapMode="none" selectable={false}>
+      <Show when={props.bold} fallback={props.label}><b>{props.label}</b></Show>
+      <Show when={props.suffix}><span style={{ fg: props.ctx.theme.text.muted }}>{props.suffix}</span></Show>
+    </text>
   </box>
 }
 
@@ -130,16 +133,17 @@ function ProjectSidebar(props: { ctx: Context; sessionID: string }) {
     const [closed, setClosed] = createSignal(false)
     const p = () => input.node.project
     return <box flexDirection="column">
-      <Row ctx={ctx} indent={input.indent} current={input.node.related} label={`${open() ? "▾" : "▸"} ${p().name} · ${p().status}`} run={() => setOpen(v => !v)} />
+      <box flexDirection="row" height={1} paddingLeft={input.indent}>
+        <Row ctx={ctx} width={2} label={open() ? "▾" : "▸"} run={() => setOpen(v => !v)} />
+        <Row ctx={ctx} flexGrow={1} current={input.node.related} label={p().name} bold suffix={` · ${p().status}`} run={() => { void actions(p()) }} />
+      </box>
       <Show when={open()}>
-        <Row ctx={ctx} indent={input.indent + 2} label="Actions" run={() => { void actions(p()) }} />
         <For each={taskTree(p().tasks.filter(t => t.status !== "closed"))}>{node => <TaskView p={p()} node={node} indent={input.indent + 2} />}</For>
         <Show when={p().tasks.some(t => t.status === "closed")}>
           <Row ctx={ctx} indent={input.indent + 2} label={`${closed() ? "▾" : "▸"} Completed (${p().tasks.filter(t => t.status === "closed").length})`} run={() => setClosed(v => !v)} />
           <Show when={closed()}><For each={taskTree(p().tasks.filter(t => t.status === "closed"))}>{node => <TaskView p={p()} node={node} indent={input.indent + 4} />}</For></Show>
         </Show>
-        <Show when={p().sessions.length}><text fg={ctx.theme.text.muted}>{" ".repeat(input.indent + 2)}Sessions</text></Show>
-        <For each={p().sessions}>{session => sessionRow(session.id, input.indent + 4, session.title)}</For>
+        <For each={p().sessions}>{session => sessionRow(session.id, input.indent + 2, session.title)}</For>
         <For each={input.node.children}>{node => <ProjectView node={node} indent={input.indent + 2} />}</For>
       </Show>
     </box>
@@ -152,8 +156,10 @@ function ProjectSidebar(props: { ctx: Context; sessionID: string }) {
     catch (e) { return { sessions: [], error: errorMessage(e) } }
   })
   return <box flexDirection="column" marginBottom={1}>
-    <text fg={ctx.theme.text.base}>Projects</text>
-    <Row ctx={ctx} label={loading() ? "Refreshing…" : "Refresh"} run={() => { void refresh() }} />
+    <box flexDirection="row" height={1} paddingRight={1}>
+      <text fg={ctx.theme.text.base} flexGrow={1}>Projects</text>
+      <Row ctx={ctx} width={1} label="↻" run={() => { void refresh() }} />
+    </box>
     <Show when={error()}><text fg={ctx.theme.text.muted} wrapMode="word">{error()}</text></Show>
     <Show when={!loading() && !error() && tree().length === 0}><text fg={ctx.theme.text.muted}>No active projects</text></Show>
     <For each={tree()}>{node => <ProjectView node={node} indent={0} />}</For>
