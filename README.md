@@ -1,6 +1,6 @@
 ---
 title: OpenCode pj/tk workspace plugin
-status: isolated-native-acceptance-passed
+status: installed-working-profile
 updated: 2026-11-07
 ---
 
@@ -8,7 +8,7 @@ updated: 2026-11-07
 
 Server and TUI plugin for OpenCode 2.2.5. Project relationships and durable tasks come exclusively from the `pj` CLI. Discovery conventions are `projects/` and `.archived/` within the current Git checkout. The plugin keeps no relationship database, project configuration file, or migration state.
 
-**Current checkpoint:** implementation commit `fe48b473` passed isolated native acceptance. Project archive is a managed folder move from `projects/<relative>` to `.archived/<relative>`. The sidebar shows active projects and a searchable Inbox above native blocks, preserving native Todo. Agents use `pj` directly through native shell. Cold Inbox, pagination, navigation, restart, project archive and native forks are verified. Production installation and data migration remain a separate step.
+**Current checkpoint:** implementation commit `fe48b473` passed isolated native acceptance and is installed in the working profile. Project archive is a managed folder move from `projects/<relative>` to `.archived/<relative>`. The sidebar shows active projects and a searchable Inbox above native blocks, preserving native Todo. Agents use `pj` directly through native shell. Cold Inbox, pagination, navigation, restart, project archive and native forks are verified in isolation. The working profile now reads 23 migrated projects and 25 hidden legacy membership stubs.
 
 ## Local development
 
@@ -120,4 +120,10 @@ Cold-cache RED→GREEN: cache contains only A; official pages contain A/B, then 
 
 The coordinator repeated typecheck and the full real-pj suite: 76 tests, 308 assertions, 8.47 seconds. A focused independent review found no P1/P2 blockers. The isolated native harness then passed on unchanged source hashes; the coordinator verified the evidence before recording acceptance.
 
-[Native report and portable evidence](../md/opencode-knowledge-base/10_Projects/herdr-spaces-sidebar/verification/2026-11-07-cold-inbox/README.md): 205 filler sessions put C beyond the first page; archive preserved original session metadata/history, task claims/status and documents; each linked fork and project move produced one scoped commit. All owned test processes exited. The installed working profile and real project data remain unchanged.
+[Native report and portable evidence](../md/opencode-knowledge-base/projects/herdr-spaces-sidebar/verification/2026-11-07-cold-inbox/README.md): 205 filler sessions put C beyond the first page; archive preserved original session metadata/history, task claims/status and documents; each linked fork and project move produced one scoped commit. All owned test processes exited. This isolated run preceded production installation.
+
+## Working profile cutover — 2026-11-07
+
+The server configuration loads this package and its TUI export. Installed `pj`, `tk` and `tk-claim` resolve through chezmoi-managed `~/.local/bin` symlinks. Vault migration commit `4edf8f21` moved 23 project folders while preserving HEAD/index/worktree differences, 19,003 ignored entries and 223 untracked entries. Legacy Agent Home aliases remain compatible; pj memberships use folder paths.
+
+The actual working TUI renders Projects and Refresh with migrated sessions. All 36 memberships match the inventory. Histories and metadata of 35 idle native sessions are unchanged; only the running coordinator conversation advanced. Inbox and native Todo lie below the working viewport and retain their isolated acceptance coverage. [Cutover evidence](../md/opencode-knowledge-base/projects/herdr-spaces-sidebar/verification/2026-11-07-production/README.md).
