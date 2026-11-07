@@ -5,7 +5,7 @@ export type Task = {
   claimed_by_sessions: string[]; ready: boolean; body: string; path: string
 }
 export type Project = {
-  path: string; name: string; parent: string | null; status: ProjectStatus
+  path: string; name: string; parent: string | null; status: string
   sessions: { id: string; title: string }[]; tasks: Task[]; notePath: string
 }
 export type Write = {
@@ -75,8 +75,8 @@ export function task(value: unknown): Task {
 }
 export function project(value: unknown): Project {
   const p = record(value)
-  const status = text(p.status) as ProjectStatus
-  if (!projectStatuses.includes(status) || !Array.isArray(p.sessions) || !Array.isArray(p.tasks)) throw new ContractError("Invalid project state")
+  const status = text(p.status, 256)
+  if (!status || !Array.isArray(p.sessions) || !Array.isArray(p.tasks)) throw new ContractError("Invalid project state")
   return {
     path: projectPath(p.path), name: text(p.name), parent: p.parent === null ? null : projectPath(p.parent), status,
     sessions: p.sessions.map(s => { const x = record(s); return { id: sid(x.id), title: text(x.title) } }),

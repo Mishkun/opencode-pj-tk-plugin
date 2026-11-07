@@ -3,7 +3,8 @@ import type { SessionInfo } from "@opencode/client"
 import { isAbsolute } from "node:path"
 
 export function onNativeInventoryChanged(context: Pick<Context, "data">, refresh: () => void): () => void {
-  const stops = (["server.connected", "session.created", "session.forked", "session.deleted", "session.archived", "session.unarchived", "session.renamed", "session.moved"] as const)
+  const stops = (["server.connected", "session.created", "session.forked", "session.deleted", "session.archived", "session.unarchived", "session.renamed", "session.moved",
+    "session.execution.started", "session.execution.succeeded", "session.execution.failed", "session.execution.interrupted", "session.inbox.enqueued", "session.inbox.delivered"] as const)
     .map(type => context.data.on(type, refresh))
   return () => { stops.forEach(stop => stop()) }
 }

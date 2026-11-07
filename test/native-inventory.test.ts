@@ -186,10 +186,11 @@ test("native inventory change subscriptions refresh for all required events and 
   } } } as unknown as Pick<Context, "data">
   let refreshes = 0
   const stop = onNativeInventoryChanged(context, () => { refreshes++ })
-  const events = ["server.connected", "session.created", "session.forked", "session.deleted", "session.archived", "session.unarchived", "session.renamed", "session.moved"]
+  const events = ["server.connected", "session.created", "session.forked", "session.deleted", "session.archived", "session.unarchived", "session.renamed", "session.moved",
+    "session.execution.started", "session.execution.succeeded", "session.execution.failed", "session.execution.interrupted", "session.inbox.enqueued", "session.inbox.delivered"]
   expect([...listeners.keys()]).toEqual(events)
   for (const event of events) listeners.get(event)!()
-  expect(refreshes).toBe(8)
+  expect(refreshes).toBe(events.length)
   stop()
   expect(stopped).toEqual(events)
   expect(listeners.size).toBe(0)
@@ -211,7 +212,7 @@ test("session.forked alone discovers a new unlinked fork through official invent
   const stop = onNativeInventoryChanged(context, () => { refreshed = read() })
   native = [session(), C, fork]
   listeners.get("session.forked")!()
-  expect(await refreshed).toEqual(["ses_Fork", "ses_C"])
+  expect(await refreshed).toEqual(["ses_C", "ses_Fork"])
   expect(api.calls).toHaveLength(2)
   stop()
 })
