@@ -23,6 +23,6 @@ test("HOST project archive invokes bounded pj move from explicit project cwd onc
   const service = hostWorkspaceService(bridge, async () => { changes++ })
   const result = await service.operate({ project: "projects/P", operation: { kind: "project-archive" } })
   expect(result).toMatchObject({ ok: true, project: ".archived/P", write: { state: "committed" } })
-  expect(calls.map(c => [c.cwd, c.args])).toEqual([["/vault", ["list", "--json"]], ["/vault/projects/P", ["move", ".archived/P", "--json"]]])
+  expect(calls.map(c => [c.cwd, c.args])).toEqual([["/vault", ["list", "-a", "--archived", "--json"]], ["/vault/projects/P", ["move", ".archived/P", "--json"]]])
   expect(changes).toBe(1)
 })

@@ -145,6 +145,10 @@ test("server native event subscription retains a valid fork without optional loc
 test("agent instructions give direct native shell commands with safely quoted configured executable", () => {
   const instructions = projectShellInstructions("/vault with space", "ses_A", "/bin/pj's $(false)")
   expect(instructions).toContain("'/bin/pj'\\''s $(false)' list --json")
+  expect(instructions).toContain("'/bin/pj'\\''s $(false)' list --archived --json")
+  expect(instructions).toContain("'/bin/pj'\\''s $(false)' list --session 'ses_A' --archived --json")
+  expect(instructions).toContain("tk close TASK_ID --result 'Result and verification' --json")
+  expect(instructions).toContain("error.owners")
   expect(instructions).toContain("'/bin/pj'\\''s $(false)' tk claim TASK_ID 'ses_A' --json")
   expect(instructions).toContain("Vault root: '/vault with space'")
   expect(instructions).toContain("nearest project")

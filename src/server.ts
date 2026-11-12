@@ -12,17 +12,20 @@ export function projectShellInstructions(root: string, sessionID: string, execut
     "Project workspace: use native shell directly for pj commands. Native Todo is a separate session scratchpad.",
     `Vault root: ${quote(root)}. Projects live under projects/ and .archived/. Set the shell working directory to the vault root for list, or to the project folder (or its docs subfolder) for local commands; pj resolves the nearest project.`,
     `From vault root: ${pj} list --json`,
-    `From vault root: ${pj} list --session ${current} --json`,
+    `From vault root (complete inventory): ${pj} list --archived --json`,
+    `From vault root (all memberships): ${pj} list --session ${current} --archived --json`,
+    "List returns compact project records. Use --fields for selected fields or -a for full snapshots with task bodies. Add --archived to include archived projects.",
     `From project cwd: ${pj} show --json`,
     `From project cwd: ${pj} context --json`,
     `From project cwd: ${pj} session link ${current} --json`,
     `From project cwd: ${pj} tk claim TASK_ID ${current} --json`,
-    `From project cwd: ${pj} tk close TASK_ID --json`,
+    "A claim_conflict returns error.owners and the requested SID. Coordinate reassignment before explicitly using --force.",
+    `From project cwd: ${pj} tk close TASK_ID --result 'Result and verification' --json`,
     `From project cwd: ${pj} log 'Project result' --session ${current} --json`,
     `Archive projects/P from its cwd: ${pj} move '.archived/P' --json. For projects/<relative>, use .archived/<relative>; the entire nested branch moves with its status, tasks and memberships preserved. Open conversations and native execution continue.`,
     "Use context's material inventory to select documents, then read them with native read. Task checklists stay plain Markdown; task close and project status are explicit operations.",
     "Inspect the version:1 JSON envelope and command exit status. Successful mutations report write.state committed with a verified commit, or unchanged. Report errors with write.state, saved paths, checks and confirmed commit. For dirty_target, review and commit existing target edits before an explicit retry. After saved_uncommitted, unknown, timeout or cancellation, inspect current state before explicit recovery; keep retry, rollback and push explicit.",
-    "The sidebar shows active projects/ only. Inbox contains native root/fork sessions in this vault with zero memberships across the complete pj list, including .archived/. Sessions linked only to archived projects stay outside Inbox. Access archived projects through pj or files.",
+    "The sidebar shows active projects/ only. Inbox contains native root/fork sessions in this vault with zero memberships across pj list --archived, including .archived/. Sessions linked only to archived projects stay outside Inbox. Access archived projects through pj or files.",
   ].join("\n")
 }
 

@@ -43,7 +43,7 @@ export function parseOperation(value: unknown): Operation {
 export function argsFor(op: Operation, project?: string): string[] {
   let args: string[]
   switch (op.kind) {
-    case "list": args = ["list", ...(op.sessionID === undefined ? [] : ["--session", sid(op.sessionID)])]; break
+    case "list": args = ["list", "-a", "--archived", ...(op.sessionID === undefined ? [] : ["--session", sid(op.sessionID)])]; break
     case "show": case "context": args = [op.kind]; break
     case "link": case "unlink": args = ["session", op.kind, sid(op.sessionID), ...(op.title === undefined ? [] : ["--title", positional(op.title, 512)])]; break
     case "fork": args = ["session", "fork", sid(op.source), sid(op.target), ...(op.title === undefined ? [] : ["--title", positional(op.title, 512)])]; break

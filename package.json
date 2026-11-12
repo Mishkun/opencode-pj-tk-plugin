@@ -2,6 +2,9 @@
   "name": "opencode-pj-tk-plugin",
   "version": "0.1.0",
   "private": true,
+  "description": "OpenCode project and task sidebar powered by the pj CLI",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/Mishkun/opencode-pj-tk-plugin.git" },
   "type": "module",
   "exports": { ".": "./index.ts", "./tui": "./tui.ts", "./rpc": "./src/rpc.ts" },
   "scripts": {

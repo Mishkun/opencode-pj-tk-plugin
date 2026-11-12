@@ -14,8 +14,8 @@ const { default: plugin } = await import("../src/tui")
 const { SessionState } = await import("../src/session-state")
 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
-async function sidebar(options: { native?: SessionInfo[]; projects?: Project[]; hidden?: boolean; light?: boolean; initialNativeRead?: () => Promise<SessionInfo[]>; waitReady?: boolean } = {}) {
-  const dialogs: any[] = [], focused: string[] = [], navigated: unknown[] = [], operations: unknown[] = [], toasts: any[] = [], layers: KeymapLayer[] = []
+async function sidebar(options: { native?: SessionInfo[]; projects?: Project[]; hidden?: boolean; light?: boolean; initialNativeRead?: () => Promise<SessionInfo[]>; waitReady?: boolean; operationResult?: unknown } = {}) {
+  const dialogs: any[] = [], alerts: any[] = [], focused: string[] = [], navigated: unknown[] = [], operations: unknown[] = [], toasts: any[] = [], layers: KeymapLayer[] = []
   let snapshots = 0, pendingReads = 0
   const [current, setCurrent] = createSignal("ses_A"), [mounted, setMounted] = createSignal(!options.hidden)
   let select: (input: any) => string | undefined | Promise<string | undefined> = () => undefined
@@ -34,7 +34,7 @@ async function sidebar(options: { native?: SessionInfo[]; projects?: Project[]; 
   const ctx = {
     location: { directory: "/vault/projects/P" }, theme: { text: { base, muted, feedback: { error: { base: error } } } },
     client: {
-      rpc: () => ({ snapshot: async () => { snapshots++; return { projects, vaultRoot: "/vault", complete: true } }, operate: async (input: unknown) => { operations.push(input); return { ok: true, write: { state: "unchanged" } } }, events: { on: () => () => {} } }),
+      rpc: () => ({ snapshot: async () => { snapshots++; return { projects, vaultRoot: "/vault", complete: true } }, operate: async (input: unknown) => { operations.push(input); return options.operationResult ?? { ok: true, write: { state: "unchanged" } } }, events: { on: () => () => {} } }),
       session: { get: async ({ sessionID }: { sessionID: string }) => native.find(session => session.id === sessionID), list: async () => ({ data: await nativeRead(), cursor: {} }) },
       permission: { request: { list: async () => { pendingReads++; return { data: await permissions() } } } },
       form: { list: async () => { pendingReads++; return { data: [] } } },
@@ -43,7 +43,7 @@ async function sidebar(options: { native?: SessionInfo[]; projects?: Project[]; 
     keymap: { layer: (factory: () => KeymapLayer) => { layers.push(factory()) } },
     ui: {
       slot: (slot: { render: (input: { sessionID: string }) => JSX.Element }) => { render = () => slot.render({ get sessionID() { return current() } }); return () => {} },
-      dialog: { select: async (input: any) => { dialogs.push(input); return select(input) }, prompt: () => prompt(), confirm: () => confirm() }, toast: { show: (input: unknown) => { toasts.push(input) } },
+      dialog: { select: async (input: any) => { dialogs.push(input); return select(input) }, prompt: () => prompt(), confirm: () => confirm(), alert: async (input: unknown) => { alerts.push(input) } }, toast: { show: (input: unknown) => { toasts.push(input) } },
       tabs: { enabled: () => true, focus: (id: string) => { focused.push(id) }, list: () => [] },
       router: { current: () => current() ? { type: "session", sessionID: current() } : { type: "home" }, navigate: (input: unknown) => { navigated.push(input) } },
     },
@@ -58,7 +58,7 @@ async function sidebar(options: { native?: SessionInfo[]; projects?: Project[]; 
   const emit = (type: string, data: unknown = {}, created = Date.now()) => { listeners.get(type)?.(); for (const run of allListeners) run({ details: { type, created, data } }) }
   const refresh = async () => { emit("server.connected"); await Bun.sleep(115); await view.flush() }
   const dispose = async () => { await view.dispose(); await cleanup?.() }
-  return { ...view, dispose, [Symbol.asyncDispose]: dispose, ctx, native, projects, lines, position, click, span, dialogs, focused, navigated, operations, base, muted, error, emit, refresh, toasts, layers, listeners, allListeners, snapshots: () => snapshots, pendingReads: () => pendingReads,
+  return { ...view, dispose, [Symbol.asyncDispose]: dispose, ctx, native, projects, lines, position, click, span, dialogs, alerts, focused, navigated, operations, base, muted, error, emit, refresh, toasts, layers, listeners, allListeners, snapshots: () => snapshots, pendingReads: () => pendingReads,
     remount: async () => { setMounted(false); await view.flush(); setMounted(true); await view.flush() },
     visible: async (value: boolean) => { setMounted(value); await view.flush() }, prompt: (handler: typeof prompt) => { prompt = handler }, confirm: (handler: typeof confirm) => { confirm = handler },
     select: (handler: typeof select) => { select = handler }, route: setCurrent, nativeRead: (handler: typeof nativeRead) => { nativeRead = handler }, permissions: (handler: typeof permissions) => { permissions = handler } }
@@ -308,6 +308,16 @@ test.each(["project:projects/P", "task:projects/P:p-1234"])("picker %s reuses ex
   expect(view.dialogs[1].title).toBe(value.startsWith("project:") ? "projects/P · in-progress" : "p-1234: Work")
   expect(view.operations).toEqual([])
   expect(view.focused).toEqual([])
+})
+
+test("task claim conflict displays every owner in the existing alert and sends one unforced operation", async () => {
+  await using view = await sidebar({ hidden: true, operationResult: { version: 1, ok: false, project: "projects/P", data: {}, write: { state: "not_written", paths: [], commit: null }, error: { code: "claim_conflict", message: "Task is already claimed", owners: ["ses_B", "ses_C"], requested: "ses_A" } } })
+  view.select(input => input.title === "Find project, task or session" ? "task:projects/P:p-1234" : "claim")
+  await view.layers[0].commands![0].run()
+  expect(view.operations).toEqual([{ project: "projects/P", operation: { kind: "task-claim", taskID: "p-1234", sessionID: "ses_A" } }])
+  expect(view.alerts).toHaveLength(1)
+  expect(view.alerts[0].title).toBe("pj write needs review")
+  for (const value of ["claim_conflict", "ses_B", "ses_C", "not_written"]) expect(view.alerts[0].message).toContain(value)
 })
 
 test.each(["location", "projectID"])("picker rejects same-SID %s drift before opening a stale action menu", async drift => {

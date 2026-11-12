@@ -15,9 +15,9 @@ describe("structured CLI bridge", () => {
     expect(spawned).toBe(0)
   })
   test("list omits the session filter only for undefined", () => {
-    expect(argsFor({ kind: "list" })).toEqual(["list", "--json"])
-    expect(argsFor({ kind: "list", sessionID: undefined })).toEqual(["list", "--json"])
-    expect(argsFor({ kind: "list", sessionID: "ses_A" })).toEqual(["list", "--session", "ses_A", "--json"])
+    expect(argsFor({ kind: "list" })).toEqual(["list", "-a", "--archived", "--json"])
+    expect(argsFor({ kind: "list", sessionID: undefined })).toEqual(["list", "-a", "--archived", "--json"])
+    expect(argsFor({ kind: "list", sessionID: "ses_A" })).toEqual(["list", "-a", "--archived", "--session", "ses_A", "--json"])
   })
   test("executes separate argv and explicit project cwd; no shell interpretation", async () => {
     const calls: RunInput[] = []
@@ -71,6 +71,14 @@ describe("structured CLI bridge", () => {
     }
     const interrupted = new HostPjBridge("/vault", async () => ({ code: null, stdout: "", stderr: "", interrupted: true }))
     await expect(interrupted.call({ kind: "status", status: "done" }, "projects/P")).rejects.toMatchObject({ outcome: "unknown" })
+  })
+  test("claim conflict exposes owners without a force retry or force field", async () => {
+    const response = { ...committed, ok: false, write: { state: "not_written" as const, paths: [], commit: null }, error: { code: "claim_conflict", message: "Task is already claimed", owners: ["ses_A", "ses_B"], requested: "ses_C" } }
+    const calls: RunInput[] = []
+    const bridge = new HostPjBridge("/vault", async input => { calls.push(input); return runner(response, 1)(input) })
+    expect(await bridge.call({ kind: "task-claim", taskID: "p-1234", sessionID: "ses_C" }, "projects/P")).toEqual(response)
+    expect(calls.map(c => c.args)).toEqual([["tk", "claim", "p-1234", "ses_C", "--json"]])
+    expect(() => parseOperation({ kind: "task-claim", taskID: "p-1234", sessionID: "ses_C", force: true })).toThrow()
   })
   test("missing executable is explicitly not written", async () => {
     const bridge = new HostPjBridge("/vault", async () => { throw Object.assign(new Error("missing"), { code: "ENOENT" }) })

@@ -5,6 +5,7 @@ import { HostPjBridge, runProcess } from "../src/bridge"
 import { envelope, project, record, projectsFrom } from "../src/contract"
 import { attachFork } from "../src/lifecycle"
 import { hostWorkspaceService } from "../src/server"
+import { inboxSessions } from "../src/projection"
 import { forkEvent, session, testHost } from "./fixtures"
 
 const executable = process.env.PJ_INTEGRATION_BIN
@@ -56,11 +57,16 @@ test.skipIf(!executable)("real pj: fork/claim/readiness, then branch archive pre
     const snapshots = projectsFrom(await bridge.call({ kind: "list" }))
     expect(snapshots.filter(p => p.sessions.some(s => s.id === "ses_B")).map(p => p.path)).toEqual(["projects/P", "projects/Q"])
     expect(snapshots.find(p => p.path === "projects/P")?.tasks.find(t => t.id === T)?.claimed_by_sessions).toEqual(["ses_A"])
-    await bridge.call({ kind: "task-claim", taskID: T, sessionID: "ses_B" }, "projects/P")
+    const claimHead = await git("rev-parse", "HEAD")
+    const conflict = await bridge.call({ kind: "task-claim", taskID: T, sessionID: "ses_B" }, "projects/P")
+    expect(conflict).toMatchObject({ ok: false, error: { code: "claim_conflict", owners: ["ses_A"], requested: "ses_B" }, write: { state: "not_written", paths: [], commit: null } })
+    expect(await git("rev-parse", "HEAD")).toBe(claimHead)
+    await pj(["tk", "claim", T, "ses_B", "--force"], P, true)
     const claimed = project((await bridge.call({ kind: "show" }, "projects/P")).data.project)
     expect(claimed.tasks.find(t => t.id === T)).toMatchObject({ status: "open", claimed_by_sessions: ["ses_B"], body: initial.tasks.find(t => t.id === T)!.body })
-    await bridge.call({ kind: "task-close", taskID: T }, "projects/P")
-    await bridge.call({ kind: "task-note", taskID: T, text: "Task result" }, "projects/P")
+    const closeHead = Number(await git("rev-list", "--count", "HEAD"))
+    await pj(["tk", "close", T, "--result", "Task result"], P, true)
+    expect(Number(await git("rev-list", "--count", "HEAD"))).toBe(closeHead + 1)
     await bridge.call({ kind: "log", text: "Project result", sessionID: "ses_B" }, "projects/P")
     const final = project((await bridge.call({ kind: "show" }, "projects/P")).data.project)
     expect(final.tasks.find(t => t.id === U)).toMatchObject({ status: "open", ready: true })
@@ -114,5 +120,12 @@ test.skipIf(!executable)("real pj: fork/claim/readiness, then branch archive pre
     expect(archived.find(p => p.path === "projects/Q")?.sessions.map(s => s.id)).toEqual(["ses_A", "ses_B"])
     expect(String((await bridge.call({ kind: "context" }, ".archived/P")).data.note)).toBe(sourceNote)
     expect(String((await bridge.call({ kind: "context" }, ".archived/P/Child")).data.note)).toBe(childNote)
+    expect((await pj(["list", "--session", "ses_C"], root)).data.projects).toEqual([])
+    expect((await pj(["list", "--archived", "--session", "ses_C"], root)).data.projects).toEqual([expect.objectContaining({ path: ".archived/P/Child", taskCounts: { open: 1, in_progress: 0, closed: 0, ready: 1 } })])
+    const related = projectsFrom(await bridge.call({ kind: "list", sessionID: "ses_C" }))
+    expect(related.map(p => p.path)).toEqual([".archived/P/Child"])
+    expect(related[0].tasks[0].body).toContain("Child task")
+    const native = [session("ses_A", { location: { directory: root } }), session("ses_C", { location: { directory: root } }), session("ses_Unlinked", { location: { directory: root } })]
+    expect(inboxSessions(archived, native, root, "ses_A").map(s => s.id)).toEqual(["ses_Unlinked"])
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60_000)
