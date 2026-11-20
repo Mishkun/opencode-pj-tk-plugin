@@ -4,6 +4,7 @@ import { HostPjBridge, parseOperation, mutation, type HostRequest } from "./brid
 import { errorMessage, projectArchiveDestination, projectPath, projectsFrom, sid, text } from "./contract"
 import { attachFork } from "./lifecycle"
 import { WorkspaceRPC, hostRpcInput } from "./rpc"
+import { readCounts, remindBeforeIdle } from "./manager-counts"
 
 export function projectShellInstructions(root: string, sessionID: string, executable = process.env.OPENCODE_PJ_BIN || "pj"): string {
   const quote = (value: string) => `'${text(value).replaceAll("'", "'\\''")}'`
@@ -65,6 +66,19 @@ export default Plugin.define({
     changed = () => rpc.events.emit("changed", {})
     await ctx.session.hook("context", event => {
       event.system.push({ type: "text", text: projectShellInstructions(root, event.sessionID) })
+    })
+    const countsRoot = typeof ctx.options?.countsVaultRoot === "string" ? resolve(ctx.options.countsVaultRoot) : root
+    await ctx.session.hook("experimental.idle", async ({sessionID,background}) => {
+      if (background.length || controller.signal.aborted) return
+      try {
+        const session = await ctx.session.get({sessionID})
+        if (session.agent !== "Manager" || session.parentID || session.time.archived || !session.time.busy) return
+        const key = `ready-at-idle:${sid(sessionID)}`
+        await remindBeforeIdle(sessionID,session.time.busy,
+          ()=>readCounts(countsRoot,sessionID,controller.signal), ()=>ctx.storage.get(key),
+          m=>m ? ctx.storage.set(key,{...m}) : ctx.storage.remove(key),
+          async text=>{await ctx.session.synthetic({sessionID,text,description:"Готовые задачи pj/tk",metadata:{source:"pj.workspace.ready-at-idle"},delivery:"queue"})})
+      } catch { if(!controller.signal.aborted) console.warn("pj ready-at-idle unavailable; no further attempt in this idle hook") }
     })
     void (async () => {
       try {

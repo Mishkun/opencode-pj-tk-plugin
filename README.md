@@ -83,6 +83,8 @@ OpenCode permissions govern agent actions. Authenticated native clients and plug
 
 Agents perform project-file reads and mutations with ordinary `pj` commands in the built-in native shell. OpenCode's existing shell policy governs those calls. The system context supplies the configured executable (`OPENCODE_PJ_BIN`, otherwise `pj`), safely quoted examples, cwd conventions, and partial-outcome guidance. Selected project materials are read with native read.
 
+For a root `Manager`, `experimental.idle` checks linked, non-archived projects when the agent loop would otherwise stop and no background work remains. `countsVaultRoot` selects the pj inventory for this hook (default: checkout root). The notice gives all unresolved tasks and the subset that are `open`, dependency-ready and unclaimed or claimed by this session. No lookup on individual model/tool steps, no wake for an idle session when files change. A persisted per-SID signature suppresses repeated ready counts; zero available tasks re-arms the notice. A continuation is an opportunity to finish in-scope work, not authority to take unrelated tasks.
+
 File mutations by agents stay ordinary direct shell commands. The plugin's HOST RPC serves the TUI, and its native lifecycle integration persists fork relationships. Project archiving changes project folders and preserves native conversations, open views and execution. Existing native session archive metadata remains untouched data.
 
 Sources: [Permissions](https://opencode.ai/docs/permissions), [native client](https://opencode.ai/docs/build/client), [plugin RPC](https://opencode.ai/docs/build/plugins/rpc). Native `shell` runs with the host user's filesystem, process and network authority; its agent admission is governed by the `shell` action.
