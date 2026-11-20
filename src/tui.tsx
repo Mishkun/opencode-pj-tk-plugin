@@ -57,8 +57,8 @@ function createActions(ctx: Context, currentSession: () => string, refresh: () =
   const showTask = async (p: Project, task: Task) => {
     const origin = capture()
     const action = await ctx.ui.dialog.select({ title: `${task.id}: ${task.title}`, options: [
-      { title: "Read task text", value: "read", description: `${task.status}; ${task.ready ? "ready" : "not ready"}${task.parent ? `; parent: ${task.parent}` : ""}` },
-      { title: "Start task", value: "start" }, { title: "Close task", value: "close" },
+      { title: "Read task text", value: "read", description: [task.status==="in_progress"?"In progress":task.status==="closed"?"Closed":task.ready?"Ready":"Blocked",task.parent?`Parent: ${task.parent}`:null].filter(Boolean).join(" · ") },
+      ...(task.status==="open"?[{title:"Start task",value:"start"}]:[]), ...(task.status!=="closed"?[{title:"Close task",value:"close"}]:[]),
       { title: "Claim for current session", value: "claim", description: origin.sessionID }, { title: "Append task note", value: "note" },
     ] })
     if (!action || !valid(origin)) return

@@ -142,15 +142,38 @@ test("pj footer follows actual SID on route changes and folds multiple membershi
   finally{await footer.dispose()}
 })
 
-test.each(["graph","kanban"] as const)("task %s renders dependency or status, including finished tasks",async mode=>{
+test.each(["graph","kanban"] as const)("task %s draws finished tasks, visible exit and clickable task titles",async mode=>{
   const tasks=[task({id:"prep",title:"Prepare",status:"closed"}),task({id:"build",title:"Build",deps:["prep"],status:"in_progress"}),task({id:"ship",title:"Ship",deps:["build"],ready:false})]
   await using v=await sidebar({projects:[project("projects/P",{tasks})]});let render:(()=>JSX.Element)|undefined
-  v.ctx.ui.dialog.show=f=>{render=f};v.ctx.ui.dialog.set=()=>{}
+  let clears=0
+  v.ctx.ui.dialog.show=f=>{render=f};v.ctx.ui.dialog.set=()=>{};v.ctx.ui.dialog.clear=()=>{clears++}
   Object.defineProperty(v.ctx,"renderer",{value:{height:32}})
   v.select(()=>mode);await v.click("P ◐");expect(render).toBeDefined()
   const dialog=await testRender(render!,{width:88,height:28})
-  try{await dialog.waitForFrame(f=>f.includes("Ship"));const f=dialog.captureCharFrame();expect(f).toContain(mode==="graph"?"build → ship":"In progress (1)");expect(f).toContain("Prepare")}
+  try{
+    await dialog.waitForFrame(f=>f.includes("Ship"))
+    const f=dialog.captureCharFrame();expect(f).toContain(mode==="graph"?"▼":"In progress (1)");expect(f).toContain("Prepare");expect(f).toContain("Esc · Close")
+    const lines=f.split("\n"),y=lines.findIndex(l=>l.includes("Build"))
+    await dialog.mockMouse.click(lines[y].indexOf("Build")+1,y);await dialog.flush()
+    expect(clears).toBe(1);expect(v.dialogs.at(-1).title).toBe("build: Build")
+  }
   finally{await dialog.dispose()}
+})
+
+test.each(["ESCAPE","close","keyboard"])("task board supports %s without a mouse-only modal trap",async operation=>{
+  await using v=await sidebar();let render!:()=>JSX.Element,clears=0
+  v.ctx.ui.dialog.show=f=>{render=f};v.ctx.ui.dialog.set=()=>{};v.ctx.ui.dialog.clear=()=>{clears++}
+  v.select(()=>"kanban");await v.click("Parent project")
+  const board=await testRender(render,{width:72,height:24})
+  try{
+    await board.waitForFrame(f=>f.includes("Esc · Close"))
+    if(operation==="close"){
+      const lines=board.captureCharFrame().split("\n"),y=lines.findIndex(l=>l.includes("Esc · Close"));await board.mockMouse.click(lines[y].indexOf("Esc · Close")+1,y)
+    }else if(operation==="keyboard"){board.mockInput.pressKey("ARROW_DOWN");board.mockInput.pressEnter()}
+    else {board.mockInput.pressEscape();await Bun.sleep(75)} // PTY parser distinguishes Esc from a CSI sequence.
+    await board.flush();expect(clears).toBe(1)
+    if(operation==="keyboard")expect(v.dialogs.at(-1).title).toContain("Finished task")
+  }finally{await board.dispose()}
 })
 
 test.each([false, true])("selected M:N projects/ancestors and sessions use semantic base (light=%s)", async light => {
@@ -191,7 +214,7 @@ test("tasks sit under claiming sessions; cross-claim tasks repeat and hidden cla
   expect(view.lines().some(line => line.includes("Done task · closed"))).toBe(true)
   await view.click("Hidden claim")
   expect(view.dialogs[0].title).toBe("C: Hidden claim")
-  expect(view.dialogs[0].options[0].description).toContain("parent: B")
+  expect(view.dialogs[0].options[0].description).toContain("Parent: B")
   expect(tasks.map(task => [task.id, task.parent])).toEqual([["A", null], ["B", "A"], ["C", "B"], ["D", null]])
   expect(view.dialogs[0].options.map((option: any) => option.value)).toEqual(["read", "start", "close", "claim", "note"])
   await view.click("▾ tasks")

@@ -1,7 +1,7 @@
 ---
 title: OpenCode pj/tk workspace plugin
 status: experimental
-updated: 2026-11-12
+updated: 2026-11-20
 ---
 
 # OpenCode pj/tk workspace
@@ -96,6 +96,8 @@ The sidebar shows project folder ancestry under `projects/`, independent project
 Click a project for **Go to manager session**, **Start new linked session**, **View task graph**, **View task kanban**, and **Reveal project sessions in Rex**. Multiple linked root Managers open a chooser. **Manage project…** holds context, notes, task creation, explicit membership, project status and archive. The prompt footer reads pj memberships by the exact SID (including the configured Agent Home vault for cross-checkout sessions). If another plugin also supplies a project footer, disable its footer contribution. Task selection offers plain task text, start, close, claim, and task notes. Markdown checklists stay ordinary task body text. Controls use muted text, base text on hover, and transparent backgrounds.
 
 Inbox loads the authenticated official native inventory through `ctx.client.session.list({ project: current.projectID, limit: 200, order: "desc", cursor }, { signal })`. Current project metadata comes from `data.session.get(sessionID)`, with authenticated `client.session.get({ sessionID }, { signal })` fallback when cold. The list input omits `directory` to cover nested vault folders and omits `archived` to include both native states.
+
+In the task graph, boxes are tasks and arrows run from prerequisite to dependent. Tasks without edges are grouped separately; missing prerequisites and cyclic edges are reported explicitly. In either graph or kanban, click a card or use ↑/↓ and Enter to open the task menu. Press Esc or click **Esc · Close** to dismiss the view.
 
 Every populated page with a next cursor is followed, including the final populated page on OpenCode 2.2.5. An empty page or an absent/null next cursor terminates loading. SIDs are deduplicated, keeping their first occurrence. A repeated cursor, malformed page, read failure or cancellation rejects the whole load. Accumulated pages stay local until success. The sidebar publishes the complete project snapshot and inventory together; request-local session ID/signal, latest-generation and disposal guards prevent stale publication. Loading and unavailable states keep Inbox classification hidden.
 
