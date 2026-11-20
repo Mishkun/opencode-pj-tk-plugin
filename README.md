@@ -6,7 +6,7 @@ updated: 2026-11-12
 
 # OpenCode pj/tk workspace
 
-Projects, tasks and related sessions in the OpenCode terminal sidebar, powered by the [pj CLI](https://github.com/Mishkun/pj). Project records live in `projects/` and `.archived/` within a Git checkout. The plugin adds project actions, task controls and a searchable Inbox for sessions without project membership. Native Todo remains available for session-local work.
+Projects, tasks and related sessions in the OpenCode terminal sidebar, powered by the [pj CLI](https://github.com/Mishkun/pj). Project records live in `projects/` and `.archived/` within a Git checkout or a standalone file workspace. The plugin adds project actions, task controls and a searchable Inbox for sessions without project membership. Native Todo remains available for session-local work.
 
 Targets OpenCode **2.2.5**. SDK/client versions and UI dependencies are pinned to that tested integration.
 
@@ -31,7 +31,7 @@ Targets OpenCode **2.2.5**. SDK/client versions and UI dependencies are pinned t
    }
    ```
 
-4. Open a session in your Git repository. Create its first project with `pj`:
+4. Open a session in your workspace. Outside Git, run `pj init --workspace` from the workspace root first. Create its first project with `pj`:
 
    ```sh
    mkdir -p projects/example
@@ -93,7 +93,7 @@ Sources: [Permissions](https://opencode.ai/docs/permissions), [native client](ht
 
 The sidebar shows project folder ancestry under `projects/`, independent project status, task parentage/readiness/status, all stored task assignments, and related sessions. Completed tasks start collapsed. Selecting a session uses native tabs focus, or native session routing when tabs are disabled. The native conversation and composer remain host-owned. Archived project folders are accessed through the CLI or files.
 
-Project Actions offers context, notes, task creation, explicit membership, project status, and **Archive project**. Task selection offers plain task text, start, close, claim, and task notes. Markdown checklists stay ordinary task body text. Controls use muted text, base text on hover, and transparent backgrounds.
+Click a project for **Go to manager session**, **Start new linked session**, **View task graph**, **View task kanban**, and **Reveal project sessions in Rex**. Multiple linked root Managers open a chooser. **Manage project…** holds context, notes, task creation, explicit membership, project status and archive. The prompt footer reads pj memberships by the exact SID (including the configured Agent Home vault for cross-checkout sessions). If another plugin also supplies a project footer, disable its footer contribution. Task selection offers plain task text, start, close, claim, and task notes. Markdown checklists stay ordinary task body text. Controls use muted text, base text on hover, and transparent backgrounds.
 
 Inbox loads the authenticated official native inventory through `ctx.client.session.list({ project: current.projectID, limit: 200, order: "desc", cursor }, { signal })`. Current project metadata comes from `data.session.get(sessionID)`, with authenticated `client.session.get({ sessionID }, { signal })` fallback when cold. The list input omits `directory` to cover nested vault folders and omits `archived` to include both native states.
 
@@ -120,7 +120,7 @@ pj_bin="${OPENCODE_PJ_BIN:-pj}"
 
 From `projects/P`, archive the whole branch with `"$pj_bin" move '.archived/P' --json`. For `projects/<relative>`, the destination is `.archived/<relative>` relative to the vault root. Project status remains an explicit field and is retained by the move.
 
-Inspect the version-1 envelope and exit status. A successful mutation reports `committed` with its verified commit or `unchanged`. Report saved paths, checks and commit evidence for partial/unknown outcomes. After timeout or cancellation, inspect current state before explicit recovery. Retry, rollback and push remain explicit actions.
+Inspect the version-1 envelope and exit status. A successful mutation reports `committed` with its verified commit, `saved` for a verified standalone file write, or `unchanged`. Report saved paths, checks and commit evidence for partial/unknown outcomes. After timeout or cancellation, inspect current state before explicit recovery. Retry, rollback and push remain explicit actions.
 
 Actual `session.forked` events identify the source and cross-check both native source/target identities and locations, `SessionInfo.fork.sessionID` and the message boundary. The event's optional `location` is checked when present; absent event location is resolved through those native records. The HOST lifecycle persists all relationships with one `pj session fork SOURCE TARGET --json` invocation from the vault root, including archived project memberships, with task assignments retained by the source. Generic child `parentID` never establishes fork inheritance. Real persistence failures are surfaced through RPC/toast and a native synthetic message in the forked conversation. There is no retry, rollback, or push.
 

@@ -1,9 +1,9 @@
 import type { Context } from "@opencode/plugin/tui/context"
 import type { LocationRef, SessionInfo } from "@opencode/client"
-import { isAbsolute, relative } from "node:path"
+import { isAbsolute } from "node:path"
 import { errorMessage, project, record, type Project } from "./contract"
 import { loadNativeSessions, onNativeInventoryChanged } from "./native-inventory"
-import { sessionActivity, type ActivityGroupLabel } from "./projection"
+import { contains, sessionActivity, type ActivityGroupLabel } from "./projection"
 import { WorkspaceRPC } from "./rpc"
 import { SessionState, type PendingRequest } from "./session-state"
 
@@ -13,7 +13,6 @@ export type WorkspaceEntry = {
   activity: Map<string, number>; expanded: Map<string, boolean>; groups: Map<ActivityGroupLabel, boolean>; buckets: Map<string, boolean>
   visual: SessionState; flight?: Promise<void>; timer?: ReturnType<typeof setTimeout>; dirty: boolean; request: number
 }
-const contains = (root: string, directory: string) => { const path = relative(root, directory); return path !== ".." && !path.startsWith("../") && !isAbsolute(path) }
 
 /** One plugin-lifetime owner for complete snapshots, in-flight reads and native
  * events. Sidebar mounts only subscribe; hiding a view never cancels its load. */

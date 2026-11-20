@@ -9,7 +9,7 @@ export type Project = {
   sessions: { id: string; title: string }[]; tasks: Task[]; notePath: string
 }
 export type Write = {
-  state: "committed" | "not_written" | "saved_uncommitted" | "unchanged" | "unknown"
+  state: "committed" | "saved" | "not_written" | "saved_uncommitted" | "unchanged" | "unknown"
   paths: string[]; commit: string | null; [key: string]: unknown
 }
 export type Envelope = {
@@ -98,12 +98,12 @@ export function envelope(value: unknown, mutation: boolean): Envelope {
   if (mutation && !e.write) throw new ContractError("Missing mutation write outcome")
   if (e.write) {
     const w = record(e.write)
-    if (!["committed", "not_written", "saved_uncommitted", "unchanged", "unknown"].includes(text(w.state))) throw new ContractError("Invalid write state")
+    if (!["committed", "saved", "not_written", "saved_uncommitted", "unchanged", "unknown"].includes(text(w.state))) throw new ContractError("Invalid write state")
     strings(w.paths).forEach(relativePath)
     if (w.commit !== null && (typeof w.commit !== "string" || !/^[a-f0-9]{40,64}$/.test(w.commit))) throw new ContractError("Invalid commit evidence")
     if (w.state === "committed" && !w.commit) throw new ContractError("Missing verified commit")
-    if (["not_written", "saved_uncommitted"].includes(String(w.state)) && w.commit !== null) throw new ContractError("Contradictory commit evidence")
-    if (e.ok && !["committed", "unchanged"].includes(String(w.state))) throw new ContractError("Success requires committed or unchanged state")
+    if (["not_written", "saved_uncommitted", "saved"].includes(String(w.state)) && w.commit !== null) throw new ContractError("Contradictory commit evidence")
+    if (e.ok && !["committed", "saved", "unchanged"].includes(String(w.state))) throw new ContractError("Success requires verified save, commit, or unchanged state")
   }
   if (!e.ok) { const error = record(e.error); text(error.code); if (error.message !== undefined) text(error.message) }
   return e as Envelope

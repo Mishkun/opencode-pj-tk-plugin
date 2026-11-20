@@ -2,6 +2,13 @@ import type { Project, Task } from "./contract"
 import type { SessionInfo } from "@opencode/client"
 import { isAbsolute, relative, resolve } from "node:path"
 
+// pj reports physical paths; OpenCode may retain macOS's /var or /tmp alias.
+const locationPath = (value:string) => process.platform==="darwin" ? value.replace(/^\/(var|tmp)(?=\/|$)/,"/private/$1") : value
+export const contains = (root:string,directory:string) => {
+  const path=relative(resolve(locationPath(root)),resolve(locationPath(directory)))
+  return path!==".."&&!path.startsWith("../")&&!isAbsolute(path)
+}
+
 /** Native session activity includes execution boundaries; viewing and archiving
  * have their own timestamps and do not advance activity. */
 export function sessionActivity(session?: Pick<SessionInfo, "time">): number | undefined {
@@ -111,10 +118,7 @@ export function inboxSessions(projects: Project[] | undefined, sessions: readonl
   if (!projects) throw new Error("Complete project memberships are unavailable; Inbox cannot be determined")
   if (!sessions || sessions.some(s => !s?.id || !s.projectID || !s.location?.directory || !isAbsolute(s.location.directory))) throw new Error("Native session data is unavailable; Inbox cannot be determined")
   if (!isAbsolute(vaultRoot)) throw new Error("Project vault scope is unavailable")
-  const inside = (directory: string) => {
-    const path = relative(resolve(vaultRoot), resolve(directory))
-    return path !== ".." && !path.startsWith("../") && !isAbsolute(path)
-  }
+  const inside = (directory: string) => contains(vaultRoot,directory)
   const current = sessions.find(s => s.id === currentSessionID)
   if (!current || !inside(current.location.directory)) throw new Error("Current native session data is unavailable in this vault")
   const members = new Set(projects.flatMap(p => p.sessions.map(s => s.id)))

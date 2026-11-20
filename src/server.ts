@@ -1,10 +1,21 @@
 import { Plugin } from "@opencode/plugin"
 import { resolve } from "node:path"
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
 import { HostPjBridge, parseOperation, mutation, type HostRequest } from "./bridge"
 import { errorMessage, projectArchiveDestination, projectPath, projectsFrom, sid, text } from "./contract"
 import { attachFork } from "./lifecycle"
 import { WorkspaceRPC, hostRpcInput } from "./rpc"
 import { deferForBackground, readCounts, remindBeforeIdle } from "./manager-counts"
+const exec=promisify(execFile)
+async function workspaceRoot(directory:string){
+  try{
+    const {stdout}=await exec(process.env.OPENCODE_PJ_BIN||"pj",["root","--json"],{cwd:directory,timeout:2500})
+    const info=JSON.parse(stdout)
+    if(info.ok && typeof info.data.root==="string" && info.data.root.startsWith("/"))return info.data.root as string
+  }catch{ /* A code checkout need not have its own pj workspace. */ }
+  return null
+}
 
 export function projectShellInstructions(root: string, sessionID: string, executable = process.env.OPENCODE_PJ_BIN || "pj"): string {
   const quote = (value: string) => `'${text(value).replaceAll("'", "'\\''")}'`
@@ -25,7 +36,7 @@ export function projectShellInstructions(root: string, sessionID: string, execut
     `From project cwd: ${pj} log 'Project result' --session ${current} --json`,
     `Archive projects/P from its cwd: ${pj} move '.archived/P' --json. For projects/<relative>, use .archived/<relative>; the entire nested branch moves with its status, tasks and memberships preserved. Open conversations and native execution continue.`,
     "Use context's material inventory to select documents, then read them with native read. Task checklists stay plain Markdown; task close and project status are explicit operations.",
-    "Inspect the version:1 JSON envelope and command exit status. Successful mutations report write.state committed with a verified commit, or unchanged. Report errors with write.state, saved paths, checks and confirmed commit. For dirty_target, review and commit existing target edits before an explicit retry. After saved_uncommitted, unknown, timeout or cancellation, inspect current state before explicit recovery; keep retry, rollback and push explicit.",
+    "Inspect the version:1 JSON envelope and command exit status. Successful writes in a Git workspace report committed; standalone file workspaces report saved without a commit. An idempotent mutation reports unchanged. For dirty_target in Git, review and commit existing target edits before an explicit retry. After saved_uncommitted, unknown, timeout or cancellation, inspect current state before explicit recovery; keep retry, rollback and push explicit.",
     "The sidebar shows active projects/ only. Inbox contains native root/fork sessions in this vault with zero memberships across pj list --archived, including .archived/. Sessions linked only to archived projects stay outside Inbox. Access archived projects through pj or files.",
   ].join("\n")
 }
@@ -51,13 +62,27 @@ export function hostWorkspaceService(bridge: HostPjBridge, changed: () => Promis
 export default Plugin.define({
   id: "pj.workspace.server",
   async setup(ctx) {
-    // OpenCode's project directory is the containing Git checkout, not a second vault setting.
-    const root = resolve(ctx.location.project.directory)
+    // Do not jump across a broken workspace boundary to a broader native
+    // checkout. If root discovery fails, pj must diagnose this exact location.
+    const localRoot = await workspaceRoot(ctx.location.directory)
+    const root = localRoot ?? resolve(ctx.location.directory)
+    const countsRoot = typeof ctx.options?.countsVaultRoot === "string" ? resolve(ctx.options.countsVaultRoot) : root
     const hostBridge = new HostPjBridge(root)
     const controller = new AbortController()
     let changed = async () => {}
     const hostService = hostWorkspaceService(hostBridge, () => changed())
     const rpc = await ctx.rpc.register(WorkspaceRPC, {
+      memberships: async (input, context) => {
+        const id=sid(hostRpcInput(input,["sessionID"]).sessionID)
+        const result=new Set<string>()
+        for(const cwd of new Set([localRoot??countsRoot,countsRoot])){
+          const {stdout}=await exec(process.env.OPENCODE_PJ_BIN||"pj",["list","--session",id,"--archived","--fields","path","--json"],{cwd,timeout:3000,signal:context.signal})
+          const parsed=JSON.parse(stdout)
+          if(!parsed.ok||!Array.isArray(parsed.data?.projects))throw Error("pj membership lookup failed")
+          for(const p of parsed.data.projects)result.add(projectPath(p.path))
+        }
+        return {sessionID:id,paths:[...result].sort()}
+      },
       // RPC is an authenticated HOST capability, like native client APIs.
       // Agent project-file commands run directly through native shell.
       snapshot: async (input, context) => { hostRpcInput(input, []); return { projects: await hostService.list({ signal: context.signal }), vaultRoot: root, complete: true } },
@@ -67,7 +92,6 @@ export default Plugin.define({
     await ctx.session.hook("context", event => {
       event.system.push({ type: "text", text: projectShellInstructions(root, event.sessionID) })
     })
-    const countsRoot = typeof ctx.options?.countsVaultRoot === "string" ? resolve(ctx.options.countsVaultRoot) : root
     await ctx.session.hook("experimental.idle", async ({sessionID,background}) => {
       if (deferForBackground(sessionID, background) || controller.signal.aborted) return
       try {

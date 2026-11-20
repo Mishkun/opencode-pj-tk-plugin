@@ -30,11 +30,11 @@ async function sidebar(options: { native?: SessionInfo[]; projects?: Project[]; 
   let nativeRead = options.initialNativeRead ?? (async () => native)
   let permissions = async (): Promise<{ id: string; sessionID: string }[]> => []
   const base = RGBA.fromHex(options.light ? "#111111" : "#eeeeee"), muted = RGBA.fromHex("#888888"), error = RGBA.fromHex(options.light ? "#a01010" : "#ff7777")
-  let render!: () => JSX.Element
+  let render!: () => JSX.Element, renderFooter!: () => JSX.Element
   const ctx = {
     location: { directory: "/vault/projects/P" }, theme: { text: { base, muted, feedback: { error: { base: error } } } },
     client: {
-      rpc: () => ({ snapshot: async () => { snapshots++; return { projects, vaultRoot: "/vault", complete: true } }, operate: async (input: unknown) => { operations.push(input); return options.operationResult ?? { ok: true, write: { state: "unchanged" } } }, events: { on: () => () => {} } }),
+      rpc: () => ({ memberships: async({sessionID}:{sessionID:string})=>({sessionID,paths:projects.filter(p=>p.sessions.some(s=>s.id===sessionID)).map(p=>p.path)}), snapshot: async () => { snapshots++; return { projects, vaultRoot: "/vault", complete: true } }, operate: async (input: unknown) => { operations.push(input); return options.operationResult ?? { ok: true, write: { state: "unchanged" } } }, events: { on: () => () => {} } }),
       session: { get: async ({ sessionID }: { sessionID: string }) => native.find(session => session.id === sessionID), list: async () => ({ data: await nativeRead(), cursor: {} }) },
       permission: { request: { list: async () => { pendingReads++; return { data: await permissions() } } } },
       form: { list: async () => { pendingReads++; return { data: [] } } },
@@ -42,7 +42,7 @@ async function sidebar(options: { native?: SessionInfo[]; projects?: Project[]; 
     data: { on: (type: string, run: () => void) => { listeners.set(type, run); return () => { listeners.delete(type) } }, listen: (run: (event: { details: unknown }) => void) => { allListeners.add(run); return () => { allListeners.delete(run) } }, session: { get: (id: string) => native.find(s => s.id === id) } },
     keymap: { layer: (factory: () => KeymapLayer) => { layers.push(factory()) } },
     ui: {
-      slot: (slot: { render: (input: { sessionID: string }) => JSX.Element }) => { render = () => slot.render({ get sessionID() { return current() } }); return () => {} },
+      slot: (slot: { append?:string; render: (input: { sessionID: string }) => JSX.Element }) => { const f=() => slot.render({ get sessionID() { return current() } }); if(slot.append==="prompt.footer.status")renderFooter=f;else render=f; return () => {} },
       dialog: { select: async (input: any) => { dialogs.push(input); return select(input) }, prompt: () => prompt(), confirm: () => confirm(), alert: async (input: unknown) => { alerts.push(input) } }, toast: { show: (input: unknown) => { toasts.push(input) } },
       tabs: { enabled: () => true, focus: (id: string) => { focused.push(id) }, list: () => [] },
       router: { current: () => current() ? { type: "session", sessionID: current() } : { type: "home" }, navigate: (input: unknown) => { navigated.push(input) } },
@@ -58,7 +58,7 @@ async function sidebar(options: { native?: SessionInfo[]; projects?: Project[]; 
   const emit = (type: string, data: unknown = {}, created = Date.now()) => { listeners.get(type)?.(); for (const run of allListeners) run({ details: { type, created, data } }) }
   const refresh = async () => { emit("server.connected"); await Bun.sleep(115); await view.flush() }
   const dispose = async () => { await view.dispose(); await cleanup?.() }
-  return { ...view, dispose, [Symbol.asyncDispose]: dispose, ctx, native, projects, lines, position, click, span, dialogs, alerts, focused, navigated, operations, base, muted, error, emit, refresh, toasts, layers, listeners, allListeners, snapshots: () => snapshots, pendingReads: () => pendingReads,
+  return { ...view, dispose, [Symbol.asyncDispose]: dispose, renderFooter, ctx, native, projects, lines, position, click, span, dialogs, alerts, focused, navigated, operations, base, muted, error, emit, refresh, toasts, layers, listeners, allListeners, snapshots: () => snapshots, pendingReads: () => pendingReads,
     remount: async () => { setMounted(false); await view.flush(); setMounted(true); await view.flush() },
     visible: async (value: boolean) => { setMounted(value); await view.flush() }, prompt: (handler: typeof prompt) => { prompt = handler }, confirm: (handler: typeof confirm) => { confirm = handler },
     select: (handler: typeof select) => { select = handler }, route: setCurrent, nativeRead: (handler: typeof nativeRead) => { nativeRead = handler }, permissions: (handler: typeof permissions) => { permissions = handler } }
@@ -89,7 +89,7 @@ test("independent project triangle and name retain action menu, current bullet a
   await view.click("Parent project")
   expect(view.dialogs).toHaveLength(1)
   expect(view.dialogs[0].title).toBe("projects/P · in-progress")
-  expect(view.dialogs[0].options.map((option: any) => option.value)).toEqual(["context", "log", "create", "link", "status", "archive"])
+  expect(view.dialogs[0].options.map((option: any) => option.value)).toEqual(["manager", "new-session", "graph", "kanban", "rex", "more"])
   await view.click("▸ Parent project")
   await view.click("Other session")
   expect(view.focused).toEqual(["ses_B"])
@@ -116,6 +116,41 @@ test("four local calendar groups collapse as wholes, projects precede Inbox and 
     expect(view.lines()[view.position("Yesterday member").y].slice(0, 2)).toBe("  ")
     expect(view.position("Yesterday orphan").x).toBe(2)
   } finally { clock.mockRestore() }
+})
+
+test("manager action uses actual root Manager membership, not the current session or first member",async()=>{
+  await using v=await sidebar({native:[session("ses_A",{agent:"oracle"}),session("ses_B",{agent:"Manager"}),session("ses_C",{agent:"Manager",parentID:"ses_B"})]})
+  await v.click("▸ Earlier");v.select(()=>"manager");await v.click("Parent project");expect(v.focused).toEqual(["ses_B"])
+})
+
+test("new session is created as Manager and linked before navigation; failed link preserves SID",async()=>{
+  for(const ok of [true,false]){
+    await using v=await sidebar({operationResult:{ok,write:{state:ok?"saved":"not_written"}}})
+    const creates:any[]=[]
+    v.ctx.client.session.create=async(input:any)=>{creates.push(input);return session("ses_New")}
+    v.select(()=>"new-session");v.prompt(async()=>"Work here");await v.click("Parent project")
+    expect(creates[0]).toMatchObject({agent:"Manager",title:"Work here",location:{directory:"/vault/projects/P"}})
+    expect(v.operations[0]).toMatchObject({project:"projects/P",operation:{kind:"link",sessionID:"ses_New"}})
+    expect(v.focused).toEqual(ok?["ses_New"]:[]);if(!ok)expect(v.toasts.at(-1).message).toContain("link not confirmed")
+  }
+})
+
+test("pj footer follows actual SID on route changes and folds multiple memberships",async()=>{
+  await using v=await sidebar({projects:[project("projects/P"), project("projects/Q")]})
+  const footer=await testRender(v.renderFooter,{width:55,height:2})
+  try{await footer.waitForFrame(x=>x.includes("Project: P +1"));v.route("ses_B");await footer.waitForFrame(x=>x.includes("Project: —"))}
+  finally{await footer.dispose()}
+})
+
+test.each(["graph","kanban"] as const)("task %s renders dependency or status, including finished tasks",async mode=>{
+  const tasks=[task({id:"prep",title:"Prepare",status:"closed"}),task({id:"build",title:"Build",deps:["prep"],status:"in_progress"}),task({id:"ship",title:"Ship",deps:["build"],ready:false})]
+  await using v=await sidebar({projects:[project("projects/P",{tasks})]});let render:(()=>JSX.Element)|undefined
+  v.ctx.ui.dialog.show=f=>{render=f};v.ctx.ui.dialog.set=()=>{}
+  Object.defineProperty(v.ctx,"renderer",{value:{height:32}})
+  v.select(()=>mode);await v.click("P ◐");expect(render).toBeDefined()
+  const dialog=await testRender(render!,{width:88,height:28})
+  try{await dialog.waitForFrame(f=>f.includes("Ship"));const f=dialog.captureCharFrame();expect(f).toContain(mode==="graph"?"build → ship":"In progress (1)");expect(f).toContain("Prepare")}
+  finally{await dialog.dispose()}
 })
 
 test.each([false, true])("selected M:N projects/ancestors and sessions use semantic base (light=%s)", async light => {
@@ -485,8 +520,8 @@ test("sidebar task dialog pins claim SID across route drift; unchanged dialog st
 test.each(["log", "create", "archive", "status"])("project %s nested dialog aborts contextual write after session/scope drift", async action => {
   await using view = await sidebar()
   const value = deferred<string | undefined>(), answer = deferred<boolean | undefined>()
-  let selected = false
-  view.select(() => { if (!selected) { selected = true; return action } return value.promise })
+  let selected = 0
+  view.select(() => { selected++; if(selected===1)return "more";if(selected===2)return action;return value.promise })
   view.prompt(() => value.promise); view.confirm(() => answer.promise)
   await view.click("Parent project")
   view.route("ses_B"); await view.flush()

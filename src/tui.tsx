@@ -7,10 +7,13 @@ import { focusSession } from "./lifecycle"
 import { activityGroups, inboxSessions, projectTaskBuckets, projectTree, relativeAge, sessionActivity, taskTree, type ProjectNode, type TaskNode, type ActivityGroupLabel } from "./projection"
 import { fitLabel, fuzzyItems, pickerItems, projectSymbol } from "./picker"
 import { WorkspaceRPC } from "./rpc"
-import { isAbsolute } from "node:path"
+import { isAbsolute, join } from "node:path"
 import { loadNativeSessions } from "./native-inventory"
 import { WorkspaceStore } from "./workspace-store"
 import type { BoxRenderable } from "@opentui/core"
+import { showProjectView } from "./project-views"
+import { PjFooter } from "./project-footer"
+import { publishRexRoute } from "./rex-route"
 
 function Row(props: { ctx: Context; label: string; indent?: number; run: () => void; current?: boolean; bold?: boolean; suffix?: string; width?: number; flexGrow?: number; age?: string; marker?: string }) {
   const [hover, setHover] = createSignal(false), [width, setWidth] = createSignal(Infinity)
@@ -29,7 +32,7 @@ function Row(props: { ctx: Context; label: string; indent?: number; run: () => v
   </box>
 }
 
-function createActions(ctx: Context, currentSession: () => string, refresh: () => Promise<void>) {
+function createActions(ctx: Context, currentSession: () => string, refresh: () => Promise<void>, workspaceRoot:()=>string) {
   const rpc = ctx.client.rpc(WorkspaceRPC)
   const report = (e: unknown) => ctx.ui.toast.show({ title: "Projects", message: errorMessage(e), variant: "error", duration: 10_000 })
   const capture = () => { const sessionID = currentSession(), location = { ...(ctx.location ?? ctx.data.location.default()) }; return { sessionID, projectID: ctx.data.session.get(sessionID)?.projectID, location, scope: JSON.stringify(location), warned: false } }
@@ -67,7 +70,58 @@ function createActions(ctx: Context, currentSession: () => string, refresh: () =
   }
   const actions = async (p: Project) => {
     const origin = capture()
-    const action = await ctx.ui.dialog.select({ title: `${p.path} · ${p.status}`, options: [
+    let action = await ctx.ui.dialog.select({ title: `${p.path} · ${p.status}`, options: [
+      {title:"Go to manager session",value:"manager"},
+      {title:"Start new linked session",value:"new-session"},
+      {title:"View task graph",value:"graph",description:"Prerequisites → dependents"},
+      {title:"View task kanban",value:"kanban",description:"Open / In progress / Closed"},
+      {title:"Reveal project sessions in Rex",value:"rex"},
+      {title:"Manage project…",value:"more"},
+    ] })
+    if (!action || !valid(origin)) return
+    if(action==="graph"||action==="kanban"){
+      showProjectView(ctx,p,action,t=>{if(valid(origin))void showTask(p,t).then(()=>refresh()).catch(report)})
+      return
+    }
+    if(action==="new-session"){
+      try{
+        const title=await ctx.ui.dialog.prompt({title:`New session in ${p.name}`,placeholder:"Session title"})
+        if(title===undefined||!valid(origin))return
+        const name=title.trim()||p.name
+        const created=await ctx.client.session.create({title:name,location:{directory:join(workspaceRoot(),p.path)},agent:"Manager"})
+        // Do not navigate until the membership write is confirmed. Never delete a
+        // created session or retry an uncertain write behind the user's back.
+        try{
+          const result=record(await rpc.operate({project:p.path,operation:{kind:"link",sessionID:created.id,title:name}},{location:origin.location}))
+          if(!result.ok)throw Error(JSON.stringify(result))
+        }catch(e){throw Error(`Created ${created.id}; link not confirmed for ${p.path}: ${errorMessage(e)}`)}
+        await refresh()
+        if(valid(origin))focusSession(ctx.ui,created.id)
+      }catch(e){report(e)}
+      return
+    }
+    if(action==="manager"||action==="rex"){
+      try{
+        const members=await Promise.allSettled(p.sessions.map(s=>ctx.client.session.get({sessionID:s.id})))
+        const known=members.flatMap(r=>r.status==="fulfilled"&&r.value?[r.value]:[])
+        if(!valid(origin))return
+        if(action==="manager"){
+          const choices=known.filter(s=>s.agent==="Manager"&&!s.parentID&&!s.time.archived)
+          if(!choices.length){ctx.ui.toast.show({message:members.some(r=>r.status==="rejected")?"Unable to resolve a linked manager":"No linked root Manager session",variant:"warning"});return}
+          const id=choices.length===1?choices[0].id:await ctx.ui.dialog.select({title:`Choose manager · ${p.name}`,options:choices.map(s=>({title:s.title||s.id,value:s.id,description:s.id}))})
+          if(id&&valid(origin))focusSession(ctx.ui,id)
+        }else{
+          if(!process.env.REX_SESSION)throw Error("Open this action in Rex to reveal project sessions")
+          const {revealProjectSessions}=await import("./rex-reveal")
+          const res=await revealProjectSessions({rexSession:process.env.REX_SESSION,sessions:known.map(s=>({id:s.id,title:s.title||s.id,directory:s.location.directory}))})
+          const missed=p.sessions.filter(s=>!known.some(n=>n.id===s.id)).map(s=>`${s.id}: native session unavailable`)
+          const errors=[...res.failed,...missed]
+          await ctx.ui.dialog.alert({title:`Rex · ${p.name}`,message:[`Already open: ${res.existing} · Opened: ${res.opened}`, ...errors].join("\n")})
+        }
+      }catch(e){report(e)}
+      return
+    }
+    if(action==="more")action=await ctx.ui.dialog.select({ title:`Manage ${p.name}`, options: [
       { title: "Read project context", value: "context" }, { title: "Append project note", value: "log" },
       { title: "Create task", value: "create" }, { title: "Link current session", value: "link" },
       { title: "Set project status", value: "status", description: p.status },
@@ -115,7 +169,7 @@ async function openWorkspacePicker(ctx: Context, store: WorkspaceStore) {
     const { actions, showTask } = createActions(ctx, () => {
       if (!stillCurrent()) throw new Error("Session changed; reopen workspace search")
       return sessionID
-    }, async () => {})
+    }, async () => {}, ()=>snapshot.vaultRoot as string)
     if (item.kind === "project") await actions(item.project)
     if (item.kind === "task") await showTask(item.project, item.task)
     if (item.kind === "session") focusSession(ctx.ui, item.sessionID)
@@ -144,7 +198,7 @@ function ProjectSidebar(props: { ctx: Context; sessionID: string; store: Workspa
   const working = createMemo(() => [...familyMarkers().values()].includes("working"))
   createEffect(() => { if (working()) { const timer = setInterval(() => setFrame(value => value + 1), 120); onCleanup(() => clearInterval(timer)) } })
   createEffect(() => { props.sessionID; untrack(() => { void store.ensure(props.sessionID) }) })
-  const { actions, showTask } = createActions(ctx, () => props.sessionID, () => store.refresh(props.sessionID))
+  const { actions, showTask } = createActions(ctx, () => props.sessionID, () => store.refresh(props.sessionID),()=>{const root=entry().root;if(!root)throw Error("Workspace root is not loaded");return root})
   const marker = (id: string) => {
     const state = familyMarkers().get(id) ?? (id === props.sessionID ? "selected" : "empty")
     return state === "working" ? ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"][frame() % 10] : state === "attention" ? "!" : state === "finished" ? "✓" : state === "selected" ? "•" : ""
@@ -239,9 +293,11 @@ export default Plugin.define({
   id: "pj.workspace.tui",
   setup(ctx) {
     const store = new WorkspaceStore(ctx)
+    const stopRoute = publishRexRoute(ctx)
     ctx.keymap.layer(() => ({ mode: "global", commands: [{ id: "pj.workspace.search", title: "Find project, task or session", group: "Projects", palette: true, bind: "<leader>p", run: () => openWorkspacePicker(ctx, store) }], bindings: ["pj.workspace.search"] }))
     // Additive placement preserves the native Todo, files, footer and other blocks.
+    const footer = ctx.ui.slot({ append:"prompt.footer.status",render: input=>createComponent(PjFooter,{ctx,get sessionID(){return input.sessionID}}) })
     const stop = ctx.ui.slot({ prepend: "sidebar.content", render: input => createComponent(ProjectSidebar, { ctx, store, get sessionID() { return input.sessionID } }) })
-    return () => { store.dispose(); stop() }
+    return () => { stopRoute(); store.dispose(); stop(); footer() }
   },
 })

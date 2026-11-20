@@ -15,6 +15,10 @@ export function hostRpcInput(value: unknown, keys: readonly string[]): Record<st
 export const WorkspaceRPC = Rpc.define({
   id: "pj.workspace",
   methods: {
+    memberships: {
+      input: { type:"object", properties:{sessionID}, required:["sessionID"], additionalProperties:false },
+      output: object,
+    },
     snapshot: {
       input: { type: "object", properties: {}, additionalProperties: false },
       output: object,

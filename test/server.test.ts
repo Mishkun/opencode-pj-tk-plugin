@@ -13,7 +13,7 @@ test("tools and RPC register through actual SDK setup; native context hook retai
     event: { subscribe: async function* () {} },
   })
   const cleanup = await plugin.setup(host)
-  expect(methods).toEqual(["snapshot", "operate"])
+  expect(methods).toEqual(["memberships","snapshot", "operate"])
   expect(tools).toHaveLength(0)
   const event = { sessionID: "ses_A", system: [] as any[] }
   hooks[0].run(event)
@@ -66,7 +66,7 @@ test("HOST RPC remains functional while agent file commands use native shell", a
   try {
     cleanup = await plugin.setup(host)
     const context = { signal: new AbortController().signal }
-    expect(await handlers.snapshot({}, context)).toMatchObject({ projects: [project()], vaultRoot: "/vault", complete: true })
+    expect(await handlers.snapshot({}, context)).toMatchObject({ projects: [project()], vaultRoot: "/vault/projects/P", complete: true })
     for (const sessionID of ["ses_Actual", "ses_Privileged"]) await handlers.operate({ project: "projects/P", operation: { kind: "link", sessionID } }, context)
     expect(operations.filter(op => op.kind === "link")).toEqual([{ kind: "link", sessionID: "ses_Actual" }, { kind: "link", sessionID: "ses_Privileged" }])
     await handlers.operate({ project: "projects/P", operation: { kind: "project-archive" } }, context)
