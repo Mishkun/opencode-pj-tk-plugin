@@ -1,7 +1,13 @@
 import { expect, test } from "bun:test"
-import { idleSummary, remindBeforeIdle, type IdleMemo } from "../src/manager-counts"
+import { deferForBackground, idleSummary, remindBeforeIdle, type IdleMemo } from "../src/manager-counts"
 import { listResult, project, task } from "./fixtures"
 const snapshot=(tasks:ReturnType<typeof task>[])=>JSON.stringify(listResult([project("projects/P",{tasks})]))
+test("preview servers do not suppress reminders, but pending agent work defers them",()=>{
+  const own={sessionID:"ses_A",kind:"shell"}
+  expect(deferForBackground("ses_A",[own,own,own])).toBe(false)
+  expect(deferForBackground("ses_A",[own,{...own,kind:"subagent"}])).toBe(true)
+  expect(deferForBackground("ses_A",[{sessionID:"ses_B",kind:"shell"}])).toBe(false)
+})
 test("remaining is project-wide; available excludes dependency, active, closed and foreign claim",()=>{
   const s=idleSummary(snapshot([task(),task({id:"free",claimed_by_sessions:[]}),task({ready:false}),
     task({status:"in_progress"}),task({claimed_by_sessions:["ses_other"]}),task({status:"closed"})]),"ses_A")

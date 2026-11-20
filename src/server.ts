@@ -4,7 +4,7 @@ import { HostPjBridge, parseOperation, mutation, type HostRequest } from "./brid
 import { errorMessage, projectArchiveDestination, projectPath, projectsFrom, sid, text } from "./contract"
 import { attachFork } from "./lifecycle"
 import { WorkspaceRPC, hostRpcInput } from "./rpc"
-import { readCounts, remindBeforeIdle } from "./manager-counts"
+import { deferForBackground, readCounts, remindBeforeIdle } from "./manager-counts"
 
 export function projectShellInstructions(root: string, sessionID: string, executable = process.env.OPENCODE_PJ_BIN || "pj"): string {
   const quote = (value: string) => `'${text(value).replaceAll("'", "'\\''")}'`
@@ -69,7 +69,7 @@ export default Plugin.define({
     })
     const countsRoot = typeof ctx.options?.countsVaultRoot === "string" ? resolve(ctx.options.countsVaultRoot) : root
     await ctx.session.hook("experimental.idle", async ({sessionID,background}) => {
-      if (background.length || controller.signal.aborted) return
+      if (deferForBackground(sessionID, background) || controller.signal.aborted) return
       try {
         const session = await ctx.session.get({sessionID})
         if (session.agent !== "Manager" || session.parentID || session.time.archived || !session.time.busy) return

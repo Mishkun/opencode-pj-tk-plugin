@@ -3,6 +3,11 @@ import { promisify } from "node:util"
 import { envelope, projectPath, record, sid } from "./contract"
 
 const exec = promisify(execFile)
+// Shell jobs include long-lived dev servers. Counting tickets doesn't depend
+// on their output. Only defer for owned non-shell jobs that return agent work.
+export function deferForBackground(owner: string, jobs: ReadonlyArray<{sessionID:string;kind:string}>): boolean {
+  return jobs.some(job => job.sessionID === owner && job.kind !== "shell")
+}
 export async function readCounts(root: string, id: string, signal: AbortSignal): Promise<string> {
   const { stdout } = await exec(process.env.OPENCODE_PJ_BIN || "pj",
     ["list", "--session", sid(id), "--fields", "path,tasks", "--json"],
