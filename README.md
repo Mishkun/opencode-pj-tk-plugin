@@ -10,6 +10,12 @@ Projects, tasks and related sessions in the OpenCode terminal sidebar, powered b
 
 Targets OpenCode **2.2.5**. SDK/client versions and UI dependencies are pinned to that tested integration.
 
+## Project goal (OpenCode 2.3.2)
+
+Run `/goal-pj` in a project or in a session linked to exactly one project. With several memberships, specify `/goal-pj projects/<slug> <objective>`. The native goal reviewer still judges the objective. The additional check counts **all** `open` and `in_progress` tasks in that project, including blocked and already-owned tasks. A human blocker pauses work; it is not a reason to close a ticket. Use `/goal-pj pause`, `resume`, or `clear` on a pinned goal.
+
+The calling agent has `tools.goal.manage({action:"status"|"start"|"resume"|"project", objective?, project?})` in Code Mode. It acts only on its own session. `status` returns the native state and a fresh project gate; its combined `complete` is true only after the native reviewer completes and the project gate passes. The project gate is also injected into the active session context. The plugin does not change native reviewer internals, bypass pauses or retry uncertain calls.
+
 ## Install from GitHub
 
 1. Install [pj](https://github.com/Mishkun/pj#install-from-github) and make its `bin` directory available on the OpenCode server's PATH.
