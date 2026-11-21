@@ -18,6 +18,7 @@ export function forkEvent(): SessionForked {
 export function testHost(overrides: Record<string, unknown> = {}): Plugin.Context {
   return {
     location: { directory: "/vault/projects/P", project: { id: "prj_test", directory: "/vault", canonical: "/vault" } },
+    command: { transform: async () => {} }, tool: { transform: async () => {} }, storage:{get:async()=>undefined},
     session: { get: async ({ sessionID }: { sessionID: string }) => session(sessionID) },
     permission: { assert: async () => {} }, ...overrides,
   } as unknown as Plugin.Context

@@ -7,6 +7,7 @@ import { errorMessage, projectArchiveDestination, projectPath, projectsFrom, sid
 import { attachFork } from "./lifecycle"
 import { WorkspaceRPC, hostRpcInput } from "./rpc"
 import { deferForBackground, readCounts, remindBeforeIdle } from "./manager-counts"
+import { registerGoals } from "./goals"
 const exec=promisify(execFile)
 async function workspaceRoot(directory:string){
   try{
@@ -68,6 +69,7 @@ export default Plugin.define({
     const root = localRoot ?? resolve(ctx.location.directory)
     const countsRoot = typeof ctx.options?.countsVaultRoot === "string" ? resolve(ctx.options.countsVaultRoot) : root
     const hostBridge = new HostPjBridge(root)
+    await registerGoals(ctx,localRoot??countsRoot)
     const controller = new AbortController()
     let changed = async () => {}
     const hostService = hostWorkspaceService(hostBridge, () => changed())

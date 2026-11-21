@@ -14,9 +14,9 @@ test("tools and RPC register through actual SDK setup; native context hook retai
   })
   const cleanup = await plugin.setup(host)
   expect(methods).toEqual(["memberships","snapshot", "operate"])
-  expect(tools).toHaveLength(0)
+  expect(tools.map(t=>`${t.options.namespace}.${t.name}`)).toEqual(["goal.manage"])
   const event = { sessionID: "ses_A", system: [] as any[] }
-  hooks[0].run(event)
+  for(const h of hooks.filter(h=>h.name==="context"))await h.run(event)
   expect(event.system[0].text).toContain("Native Todo is a separate session scratchpad")
   expect(event.system[0].text).toContain("zero memberships")
   expect(event.system[0].text).toContain("use native shell directly for pj commands")
@@ -78,7 +78,7 @@ test("HOST RPC remains functional while agent file commands use native shell", a
     expect(permissions).toBe(0)
     expect(tools.find(tool => tool.name === "read")).toBeUndefined()
     expect(tools.find(tool => tool.name === "mutate")).toBeUndefined()
-    expect(tools).toHaveLength(0)
+    expect(tools.map(t=>t.name)).toEqual(["manage"])
   } finally { await cleanup?.(); call.mockRestore() }
 })
 
